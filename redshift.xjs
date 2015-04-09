@@ -1,0 +1,654 @@
+﻿/*
+//------------------------------------------------------------------------------------------------------------------------------------------------------------
+ File Name:sybaseiq_v6.xjs
+Last Modified Date: 08 -04 -2014
+Author: Anil
+Random Data Generator
+ This script is for SybaseIQ database
+ Prerequisite: SybaseIQ server should be created with following credentials
+ Name: sybaseiq 
+ Database: iqdemo
+      1. Connect  to a server
+      2. Use CREATE_TABLE.sql file from User Files folder of this project to create table
+Records will not be inserted for temporary tables and tables with identity columns
+//------------------------------------------------------------------------------------------------------------------------------------------------------------
+*/
+importPackage(java.util); 
+
+
+//maximum number of rows to be inserted for each table.
+var maxRows          = 100;   
+var allowTimestamp   = true; 
+var server           = "Redshift";
+var database         =  "demo"; 
+var schema           = "public";  //hardcoded
+
+var conn = aqua.project.getServerConnection(server);
+conn.connect();
+aqua.console.println("You are connected to : "+server);
+aqua.console.println("Connected to Database : "+database);
+var metadata      = conn.getMetadata();
+var tablesArray   = metadata.extractTables(database, schema);
+aqua.console.println("\nStarted inserting random data into tables");
+
+var table_fk;
+var hasRow   = false;
+var tableName;
+var constraintsArray; 
+
+
+//====================Calculate total time required1============================
+//Returns current time in milliseconds as reported by System.currentTimeMillis().
+var startTime= aqua.system.getCurrentTime();
+//==============================================================================
+
+for (var j = 0; j < tablesArray.length;  j++)
+{
+for (var st = 0; st < maxRows; st++)
+{
+aqua.console.println("\nTable Name: "+ tablesArray[j].getName());
+var data_fk = "@@@@";
+var constraint_status = "0";
+  
+var column_name = tablesArray[j].extractColumns();
+tableName = tablesArray[j].getName();
+constraintsArray = tablesArray[j].extractConstraints();
+
+//=====Table columns datatype stored in a array========
+var datatype1 = [];
+for(var cnt = 0; cnt < column_name.length; cnt++)
+
+{
+    var temp1 = column_name[cnt].getDataType().toLowerCase();
+
+    if (temp1 == "bigint")
+      datatype1[cnt] = "bigint"; 
+    else if (temp1 == "float4")
+      datatype1[cnt] = "float4"; 
+    else if (temp1 == "float8")
+      datatype1[cnt] = "float8";
+    else if (temp1 == "int")
+      datatype1[cnt] = "int";
+    else if (temp1 == "int2")
+      datatype1[cnt] = "int2";
+    else if (temp1 == "int4")
+      datatype1[cnt] = "int4";
+    else if (temp1 == "int8")
+      datatype1[cnt] = "int8"; 
+    else if (temp1 == "integer")
+      datatype1[cnt] = "integer";
+    else if (temp1 == "numeric")
+      datatype1[cnt] = "numeric";
+    else if (temp1 == "smallint")
+      datatype1[cnt] = "smallint";
+    /*else if (temp1 == "float")
+      datatype1[cnt] = "float";
+    else if (temp1 == "image")
+      datatype1[cnt] = "image"; 
+    else if (temp1 == "int")
+      datatype1[cnt] = "int";
+    else if (temp1 == "integer")
+      datatype1[cnt] = "integer";
+    else if (temp1 == "long binary")
+      datatype1[cnt] = "long binary";
+    else if (temp1 == "long varchar")
+      datatype1[cnt] = "long varchar";
+    else if (temp1 == "money")
+      datatype1[cnt] = "money"; 
+    else if (temp1 == "numeric")
+      datatype1[cnt] = "numeric";
+    else if (temp1 == "smalldatetime")
+      datatype1[cnt] = "smalldatetime";
+    else if (temp1 == "smallint")
+      datatype1[cnt] = "smallint";
+    else if (temp1 == "smallmoney")
+      datatype1[cnt] = "smallmoney";
+    else if (temp1 == "sysname")
+      datatype1[cnt] = "sysname"; 
+    else if (temp1 == "text")
+      datatype1[cnt] = "text";
+    else if (temp1 == "time")
+      datatype1[cnt] = "time";
+    else if (temp1 == "timestamp")
+      datatype1[cnt] = "timestamp";
+    else if (temp1 == "tinyint")
+      datatype1[cnt] = "tinyint";
+    else if (temp1 == "uniqueidentifier")
+      datatype1[cnt] = "uniqueidentifier"; 
+    else if (temp1 == "uniqueidentifierstr")
+      datatype1[cnt] = "uniqueidentifierstr";
+    else if (temp1 == "varbinary")
+      datatype1[cnt] = "varbinary";
+    else if (temp1 == "varchar")
+      datatype1[cnt] = "varchar";
+    else if (temp1 == "xml")
+      datatype1[cnt] = "xml";
+*/
+}
+
+for (var c2=0; c2 < column_name.length; c2++) 
+{
+var index =0;
+var chkCons = "0";
+
+while(index < constraintsArray.length)
+{
+var FK_ref = constraintsArray[index].extractColumns();
+ 
+if(constraintsArray[index].isForeignKeyConstraint())
+{
+if(column_name[c2].getName() == FK_ref[0].getName())                                 
+{
+var data_pk = "@@@@";
+var data = "@@@@";
+var table_pk;
+
+var FK_Ref_PK = constraintsArray[index].extractForeignKeyRefColumns();
+table_pk          = FK_Ref_PK[0].getTableName();
+col_fk               = FK_Ref_PK[0].getName();
+
+data      =  generateRandomData(datatype1[c2],column_name[c2]) + ",";          // this will create data for primary column
+data_fk = data_fk + data;
+while(data_fk.charAt(0) === '@')
+data_fk = data_fk.substr(1);                                               
+if (data.charAt(data.length - 1) == ',')
+{
+data = data.substr(0, data.length - 1);
+}
+funSecondary(table_pk, col_fk,data);
+chkCons = "1";
+}
+}
+index ++;
+}
+    if(chkCons.equals("0")) 
+    {
+        data_fk = data_fk + generateRandomData(datatype1[c2],column_name[c2]) + ",";            //this will create data for other column except primary column
+    }
+}
+  var sqlScript = generateTableInsertScript(tableName, data_fk); 
+}
+}
+
+aqua.console.println("\nFinished inserting records.");
+aqua.console.println(" ");
+
+//== code to get number of records inserted into tables
+for(var n = 0; n< tablesArray.length; n++)
+{
+ var stmt = "select count(*) from "+"\"" +database+"\"" +"."+"\"" +schema+"\"" +"."+"\"" +tablesArray[n].getName()+"\"";
+ var res2 = conn.executeScript(stmt);
+var result = res2.results;
+ aqua.console.println("Number of records in table "+ tablesArray[n].getName()+":"+result[0].resultData[0].getValueAt(0,0));
+}
+//============================================================================== 
+
+
+//====================Calculate total time required2============================
+var endTime= aqua.system.getCurrentTime();
+var ms= endTime-startTime;
+
+var seconds = (ms / 1000);
+var minutes = ((ms / (1000*60)) % 60);
+var hours   =  ((ms / (1000*60*60)) % 24);
+
+aqua.console.print("\nTotal Time Required to insert "+ maxRows+ " records in "+tablesArray.length+" tables: ");
+if(seconds<1){
+ms=Math.round(ms*100)/100;
+aqua.console.print(ms+ " milliseconds ");
+}
+else if(seconds>=1 && seconds<=60){
+seconds=Math.round(seconds*100)/100;
+aqua.console.print(seconds+ " seconds ");
+}
+else if(minutes>=1 && minutes<=60){
+minutes=Math.round(minutes*100)/100;
+aqua.console.print(minutes+ " minutes ");
+}
+else if(hours>=1){
+hours=Math.round(hours*100)/100;
+aqua.console.print(hours+ " hours ");
+}
+//==============================================================================
+
+
+
+conn.disconnect();
+
+//Functions====================================================================
+function funSecondary(table_pk, col_fk,data){
+        
+                  for (var j=0; j<tablesArray.length; j++)
+                    {
+                     if(table_pk == tablesArray[j].getName()){
+
+                                                  var column_name = tablesArray[j].extractColumns();
+
+                                                  for (var c2=0; c2<column_name.length;c2++)
+                                                        { 
+                                                         if(column_name[c2].getName()==col_fk)                                 
+                                                                {
+                                                               data_pk = data_pk + data +"," ;
+                                                                 }
+                                                                 else
+                                                            {
+                                                                          data_pk = data_pk + generateRandomData(datatype1[c2],column_name[c2]) + ",";
+                                                            }
+                                                         }
+                                                                           data_pk = data_pk.substr(4, data_pk.length-2);
+                                                                                 if (data_pk.charAt(data_pk.length - 1) == ',')
+                                                                                    {
+                                                                                     data_pk = data_pk.substr(0, data_pk.length - 1);
+                                                                                    }
+                                                        var sqlScript = generateTableInsertScript(table_pk, data_pk);
+                              }
+                    }
+}
+
+
+function generateTableInsertScript(table_name_x, tabledata)
+{
+                    var tabledata = tabledata;
+                    if (tabledata.charAt(tabledata.length - 1) == ',')
+                    {
+                       tabledata = tabledata.substr(0, tabledata.length - 1);
+                     }
+                        while(tabledata.charAt(0) === ',')
+                        tabledata = tabledata.substr(1);    
+                                                                      
+                       while(tabledata.charAt(0) === '@')
+                        tabledata = tabledata.substr(1); 
+
+      var sql = " INSERT INTO " +""+"\"" +schema+"\"" +"."+"\"" +table_name_x+"\""+" VALUES ( " + tabledata + ")" ;
+      aqua.console.println("Insert script: " + sql);
+   try{
+        var res = conn.executeUpdate(sql);
+        conn.commit();
+    }
+   catch(e ){
+    aqua.console.println("exception: "+e);
+
+   }
+return sql;
+}
+//===================================================
+//Generation of random piece of data.
+function generateRandomData(dataType,column)
+{
+    var dataType = column.getDataType().toLowerCase();
+
+         if (dataType == "bigint" ){
+		return aqua.random.nextBigInteger(-923372036854775808, 923372036854775807);
+	}
+         
+        else if (dataType == "float"){
+		return aqua.random.nextFloat();
+	}
+     
+	/*else if (dataType == "bit"){
+		var len = (column.getLength() == 0 ? 1 : column.getLength());
+		var bit = "";
+		for (var i=0; i<len; i++) { 
+			bit += (aqua.random.nextInteger(0,1) == 1 ? "1" : "0"); 
+		}
+		return bit;
+	}
+            
+             else if(dataType == "blob"){
+                         var text = "";
+                                function makeid()
+                     {
+                        var possible = "abcdefghijklmnopqrstuvwxyz";
+
+                         for( var i=0; i < 4; i++ )
+                             text = possible.charAt(Math.floor(Math.random() * possible.length));
+                    }
+                     makeid();
+                        var random_blob ="\'"+text+"\'";
+                            return random_blob;
+         }
+    
+            else if (dataType == "char"){
+                   var abc="a";
+		             var col_nvarchar_length2;
+                             var col_nvarchar_length  =(column.getLength() > 25) ? 25 : column.getLength();
+                                if (col_nvarchar_length == 0 || col_nvarchar_length == -1 ) 
+                                    {
+                                         col_nvarchar_length2 = 1;
+                                     }
+                                 else{
+                                    col_nvarchar_length2 = col_nvarchar_length;
+                                    }
+                                     
+                                function makeid()
+                     {
+                        var possible = aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName();
+
+                             abc = possible.slice(0,col_nvarchar_length2);
+                             }
+                              makeid();
+
+                if (abc.search('\'') >=0)
+                {
+                abc=abc.replace('\'','')
+                return abc = "'" + abc + "'";
+                 }
+                 else
+                {
+                return abc = "'" + abc + "'";
+                } 
+	}
+
+             else if (dataType == "clob"){
+                    var random_clob ="'E:\\images\\new.jpg'"
+                    return random_clob;
+         }
+
+
+            else if (dataType == "date"){
+            var today = new Date();
+            var dd = today.getDate();
+            var mm = today.getMonth()+1; //January is 0!
+
+            var yyyy = today.getFullYear();
+/*            if(dd<10){dd='0'+dd}if(mm<10){mm='0'+mm} 
+                var today = "'"+yyyy+'-'+mm+'-'+dd+"'";
+            return today;
+	}
+*/
+
+  /*      else if (dataType == "datetime"){
+                var r_datetime = 'GETDATE()';
+                return r_datetime;
+
+	}
+
+	else if (dataType == "decimal"){
+		var precision = column.getPrecision() <= 5 ? column.getPrecision() : 5;
+		var scale     = column.getScale() <= 10 ? column.getScale() : 10;
+		return aqua.random.nextBigDecimal(precision, precision, scale, scale);
+	}
+	
+        else if (dataType == "double"){
+		return aqua.random.nextDouble();
+	}
+*/
+
+    else if (dataType == "float8"){
+		return aqua.random.nextFloat();
+	}
+	
+            /*else if(dataType == "image"){
+                var path = "\'C:\\Users\\Dimentrix\\Desktop\'";
+                    return path;
+        }*/
+	
+            else if (dataType == "int"){
+		return aqua.random.nextInteger(1, 21474836);
+	}
+        else if (dataType == "int2"){
+		return aqua.random.nextInteger(1, 21474836);
+	}
+        else if (dataType == "int4"){
+		return aqua.random.nextInteger(1, 21474836);
+	}
+        else if (dataType == "int8"){
+		return aqua.random.nextInteger(1, 21474836);
+	}
+            else if (dataType == "integer"){
+		return aqua.random.nextInteger(-147483647, 147483647);
+	}
+
+          /*  else if (dataType == "long binary"){
+                   return aqua.random.nextInteger(1,32767);
+	}*/
+    
+       /*      else if (dataType == "long varchar"){
+                   var abc="a";
+		             var col_nvarchar_length2;
+                             var col_nvarchar_length  =(column.getLength() > 25) ? 25 : column.getLength();
+                                if (col_nvarchar_length == 0 || col_nvarchar_length == -1 ) 
+                                    {
+                                         col_nvarchar_length2 = 1;
+                                     }
+                                 else{
+                                    col_nvarchar_length2 = col_nvarchar_length;
+                                    }
+                                     
+                                function makeid()
+                     {
+                        var possible = aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName();
+
+                             abc = possible.slice(0,col_nvarchar_length2);
+                             }
+                              makeid();
+
+                if (abc.search('\'') >=0)
+                {
+                abc=abc.replace('\'','')
+                return abc = "'" + abc + "'";
+                 }
+                 else
+                {
+                return abc = "'" + abc + "'";
+                } 
+	}*/
+
+
+
+       /*         else if(dataType == "money"){
+                    return aqua.random.nextDouble(-922337203685477.5808,922337203685477.5807);
+                    }
+*/
+                    else if (dataType == "numeric"){
+                            if (column.getPrecision() == 0){
+                                return aqua.random.nextBigDecimal();
+                            }
+                            else {
+                                return aqua.random.nextBigDecimal(column.getPrecision(), column.getPrecision(), column.getScale(), column.getScale());
+                            }
+                    }
+	
+              /*else if (dataType == "smalldatetime"){
+                    var r_smalldatetime = "GETDATE()";
+                    return r_smalldatetime;
+               }*/
+               
+               else if (dataType == "smallint"){
+		return aqua.random.nextInteger(-15000, 15000);
+                }
+
+              /*else if (dataType == "smallmoney"){
+		return "$" + aqua.random.nextFloat();
+                }
+
+                    	else if (dataType == "sysname"){
+                   var abc="a";
+		             var col_nvarchar_length2=15 ;
+                                                                 
+                                function makeid()
+                     {
+                        var possible = aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName() ;
+
+                             abc = possible.slice(0,col_nvarchar_length2);
+                             }
+                              makeid();
+
+                if (abc.search('\'') >=0)
+                {
+                abc=abc.replace('\'','')
+                return abc = "'" + abc + "'";
+                 }
+                 else
+                {
+                return abc = "'" + abc + "'";
+                } 
+	}
+            else if (dataType == "text"){
+                   var abc="a";
+		             var col_nvarchar_length2=20;
+                                                              
+                                function makeid()
+                     {
+                        var possible = aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName();
+
+                             abc = possible.slice(0,col_nvarchar_length2);
+                             }
+                              makeid();
+
+                if (abc.search('\'') >=0)
+                {
+                abc=abc.replace('\'','')
+                return abc = "'" + abc + "'";
+                 }
+                 else
+                {
+                return abc = "'" + abc + "'";
+                } 
+	}
+
+             else if (dataType == "time"){
+                var hour =aqua.type.date.newDate().hours;
+                var min = aqua.type.date.newDate().minutes;
+                var sec = aqua.type.date.newDate().seconds;
+                var data_time = "'"+hour+":"+min+":"+sec+"'";
+          	return data_time;
+            }
+               
+
+	else if (dataType == "timestamp"){
+            var today1 = new Date();
+            var dd1 = today1.getDate();
+            var mm1 = today1.getMonth()+1; //January is 0!
+            var yyyy1 = today1.getFullYear();
+                    if(dd1<10)
+                        {
+                            dd1='0'+dd1
+                        } 
+                    if(mm1<10)
+                        {
+                            mm1='0'+mm1
+                         } 
+                        var today11 = yyyy1+'-'+mm1+'-'+dd1;
+
+                        var hour1 =aqua.type.date.newDate().hours;
+                        var min1 = aqua.type.date.newDate().minutes;
+                        var sec1 = aqua.type.date.newDate().seconds;
+                        var milisec1 = aqua.type.date.newDate().milliseconds;
+                        var time1 = hour1+":"+min1+":"+sec1+":"+milisec1;
+                        var r_datetime1 = "'"+today11+" "+time1+"'";
+                return r_datetime1;
+		//return  null;
+	}
+
+        else if (dataType == "tinyint"){
+		return aqua.random.nextInteger(0, 124);
+                    }
+
+	else if (dataType == "uniqueidentifier"){
+		var uuid = "NEWID()";
+		return uuid;
+                    }
+
+
+	else if (dataType == "uniqueidentifierstr"){
+		//return aqua.random.nextString(1, 32).replace(" ", "");
+        //return aqua.random.nextString(1,32);
+                    var guid = "NEWID()";
+		 return guid;
+	}
+
+         else if (dataType == "varbinary"){
+            var len = column.getLength();
+           // return aqua.random.nextInteger(1,32767);
+            return aqua.random.nextInteger(1,len);
+	}
+        
+            else if (dataType == "varchar"){
+                   var abc="a";
+		             var col_nvarchar_length2;
+                             var col_nvarchar_length  =(column.getLength() > 25) ? 25 : column.getLength();
+                                if (col_nvarchar_length == 0 || col_nvarchar_length == -1 ) 
+                                    {
+                                         col_nvarchar_length2 = 1;
+                                     }
+                                 else{
+                                    col_nvarchar_length2 = col_nvarchar_length;
+                                    }
+                                     
+                                function makeid()
+                     {
+                        var possible = aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                        +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName()
+                                                    +" "+aqua.random.nextFirstName()+" "+aqua.random.nextFirstName();
+
+                                                    abc = possible.slice(0,col_nvarchar_length2);
+                                                    }
+                                                     makeid();
+
+                                       if (abc.search('\'') >=0)
+                                       {
+                                       abc=abc.replace('\'','')
+                                       return abc = "'" + abc + "'";
+                                        }
+                                        else
+                                       {
+                                       return abc = "'" + abc + "'";
+                                       } 
+	}
+    
+            else if (dataType == "xml") { 
+		return "\'<?xml version=\"1.0\" encoding=\"UTF-8\"?><xml><company>Aquafold Inc.</company></xml>\'";
+                }
+*/
+
+return null;
+}
